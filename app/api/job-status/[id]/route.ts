@@ -3,27 +3,27 @@ import { createServerSupabaseClient } from '@/lib/supabase';
 
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const jobId = params.id;
-    
+    const { id: jobId } = await params;
+
     if (!jobId) {
       return NextResponse.json(
         { error: 'Job ID is required' },
         { status: 400 }
       );
     }
-    
+
     const supabase = createServerSupabaseClient();
-    
+
     // Get job status from database
     const { data, error } = await supabase
       .from('jobs')
       .select('*')
       .eq('id', jobId)
       .single();
-    
+
     if (error) {
       console.error('Error fetching job status:', error);
       return NextResponse.json(
@@ -31,14 +31,14 @@ export async function GET(
         { status: 500 }
       );
     }
-    
+
     if (!data) {
       return NextResponse.json(
         { error: 'Job not found' },
         { status: 404 }
       );
     }
-    
+
     // Transform the data to match the expected format in the frontend
     const transformedData = {
       id: data.id,
@@ -51,7 +51,7 @@ export async function GET(
       createdAt: data.created_at,
       updatedAt: data.updated_at,
     };
-    
+
     return NextResponse.json(transformedData);
   } catch (error) {
     console.error('Error in job-status:', error);
