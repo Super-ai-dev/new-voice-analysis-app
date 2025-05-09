@@ -1,79 +1,83 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { createServerSupabaseClient } from '../../../../lib/supabase';
+import { NextResponse } from 'next/server';
+import { createServerSupabaseClient } from '@/lib/supabase';
 
-// API設定の取得
 export async function GET() {
   try {
     const supabase = createServerSupabaseClient();
     
+    // Get API keys from database
     const { data, error } = await supabase
       .from('api_settings')
-      .select('*')
-      .order('name');
+      .select('*');
     
     if (error) {
-      throw error;
+      console.error('Error fetching API keys:', error);
+      return NextResponse.json(
+        { error: 'Failed to fetch API keys' },
+        { status: 500 }
+      );
     }
     
     return NextResponse.json(data);
   } catch (error) {
-    console.error('Error fetching API settings:', error);
+    console.error('Error in GET api-keys:', error);
     return NextResponse.json(
-      { error: 'Failed to fetch API settings' },
+      { error: 'Internal server error' },
       { status: 500 }
     );
   }
 }
 
-// API設定の更新
-export async function PUT(request: NextRequest) {
+export async function POST(request: Request) {
   try {
-    const { id, api_key, is_active } = await request.json();
+    const { stt, llm } = await request.json();
     
-    if (!id) {
+    if (stt === undefined || llm === undefined) {
       return NextResponse.json(
-        { error: 'API setting ID is required' },
+        { error: 'Missing required fields' },
         { status: 400 }
       );
     }
     
     const supabase = createServerSupabaseClient();
     
-    // 更新するフィールドを準備
-    const updateData: { api_key?: string; is_active?: boolean } = {};
+    // Update STT API key
+    const { error: sttError } = await supabase
+      .from('api_settings')
+      .upsert(
+        { name: 'stt', key: stt },
+        { onConflict: 'name' }
+      );
     
-    if (api_key !== undefined) {
-      updateData.api_key = api_key;
-    }
-    
-    if (is_active !== undefined) {
-      updateData.is_active = is_active;
-    }
-    
-    // データが空の場合は更新しない
-    if (Object.keys(updateData).length === 0) {
+    if (sttError) {
+      console.error('Error updating STT API key:', sttError);
       return NextResponse.json(
-        { error: 'No fields to update' },
-        { status: 400 }
+        { error: 'Failed to update STT API key' },
+        { status: 500 }
       );
     }
     
-    const { data, error } = await supabase
+    // Update LLM API key
+    const { error: llmError } = await supabase
       .from('api_settings')
-      .update(updateData)
-      .eq('id', id)
-      .select()
-      .single();
+      .upsert(
+        { name: 'llm', key: llm },
+        { onConflict: 'name' }
+      );
     
-    if (error) {
-      throw error;
+    if (llmError) {
+      console.error('Error updating LLM API key:', llmError);
+      return NextResponse.json(
+        { error: 'Failed to update LLM API key' },
+        { status: 500 }
+      );
     }
     
-    return NextResponse.json(data);
+    return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Error updating API setting:', error);
+    console.error('Error in POST api-keys:', error);
     return NextResponse.json(
-      { error: 'Failed to update API setting' },
+      { error: 'Internal server error' },
       { status: 500 }
     );
   }

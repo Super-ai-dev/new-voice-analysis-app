@@ -1,76 +1,67 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { createServerSupabaseClient } from '../../../../lib/supabase';
+import { NextResponse } from 'next/server';
+import { createServerSupabaseClient } from '@/lib/supabase';
 
 export async function GET() {
   try {
     const supabase = createServerSupabaseClient();
-
+    
+    // Get prompt templates from database
     const { data, error } = await supabase
-      .from('settings')
-      .select('*')
-      .in('key', ['check_prompt', 'pain_prompt']);
-
+      .from('prompt_templates')
+      .select('*');
+    
     if (error) {
-      throw error;
+      console.error('Error fetching prompt templates:', error);
+      return NextResponse.json(
+        { error: 'Failed to fetch prompt templates' },
+        { status: 500 }
+      );
     }
-
-    // 結果をオブジェクトに変換
-    const prompts = data.reduce((acc, item) => {
-      acc[item.key] = item.value;
-      return acc;
-    }, {} as Record<string, string>);
-
-    return NextResponse.json(prompts);
+    
+    return NextResponse.json(data);
   } catch (error) {
-    console.error('Error fetching prompts:', error);
+    console.error('Error in GET prompt:', error);
     return NextResponse.json(
-      { error: 'Failed to fetch prompts' },
+      { error: 'Internal server error' },
       { status: 500 }
     );
   }
 }
 
-export async function PUT(request: NextRequest) {
+export async function POST(request: Request) {
   try {
-    const { check_prompt, pain_prompt } = await request.json();
-
-    if (!check_prompt && !pain_prompt) {
+    const { type, template } = await request.json();
+    
+    if (!type || !template) {
       return NextResponse.json(
-        { error: 'At least one prompt must be provided' },
+        { error: 'Missing required fields' },
         { status: 400 }
       );
     }
-
+    
     const supabase = createServerSupabaseClient();
-
-    // トランザクションで両方のプロンプトを更新
-    const updates = [];
-
-    if (check_prompt) {
-      updates.push(
-        supabase
-          .from('settings')
-          .update({ value: check_prompt, updated_at: new Date().toISOString() })
-          .eq('key', 'check_prompt')
+    
+    // Update prompt template
+    const { error } = await supabase
+      .from('prompt_templates')
+      .upsert(
+        { type, template },
+        { onConflict: 'type' }
+      );
+    
+    if (error) {
+      console.error('Error updating prompt template:', error);
+      return NextResponse.json(
+        { error: 'Failed to update prompt template' },
+        { status: 500 }
       );
     }
-
-    if (pain_prompt) {
-      updates.push(
-        supabase
-          .from('settings')
-          .update({ value: pain_prompt, updated_at: new Date().toISOString() })
-          .eq('key', 'pain_prompt')
-      );
-    }
-
-    await Promise.all(updates);
-
+    
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Error updating prompts:', error);
+    console.error('Error in POST prompt:', error);
     return NextResponse.json(
-      { error: 'Failed to update prompts' },
+      { error: 'Internal server error' },
       { status: 500 }
     );
   }

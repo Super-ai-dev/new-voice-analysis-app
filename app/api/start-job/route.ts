@@ -1,49 +1,41 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { createServerSupabaseClient } from '../../../lib/supabase';
+import { NextResponse } from 'next/server';
+import { createServerSupabaseClient } from '@/lib/supabase';
 
-export async function POST(request: NextRequest) {
+export async function POST(request: Request) {
   try {
-    const { storageKey } = await request.json();
-
-    if (!storageKey) {
+    const { jobId, fileName } = await request.json();
+    
+    if (!jobId || !fileName) {
       return NextResponse.json(
-        { error: 'Storage key is required' },
+        { error: 'Missing required fields' },
         { status: 400 }
       );
     }
-
+    
     const supabase = createServerSupabaseClient();
-
-    // ファイルの存在確認
-    const { data: fileExists, error: fileError } = await supabase.storage
-      .from('voice-analysis')
-      .getPublicUrl(storageKey);
-
-    if (fileError) {
-      throw fileError;
-    }
-
-    // ジョブの作成
-    const { data: job, error: jobError } = await supabase
+    
+    // Update job status to processing
+    const { error } = await supabase
       .from('jobs')
-      .insert({
-        storage_key: storageKey,
-        status: 'queued',
-        // 将来的にはユーザーIDを設定
-        // user_id: auth.uid(),
-      })
-      .select()
-      .single();
-
-    if (jobError) {
-      throw jobError;
+      .update({ status: 'processing' })
+      .eq('id', jobId);
+    
+    if (error) {
+      console.error('Error updating job status:', error);
+      return NextResponse.json(
+        { error: 'Failed to update job status' },
+        { status: 500 }
+      );
     }
-
-    return NextResponse.json({ jobId: job.id });
+    
+    // In a real implementation, you would trigger a background process
+    // or queue the job for processing. For now, we'll just return success.
+    
+    return NextResponse.json({ success: true, jobId });
   } catch (error) {
-    console.error('Error starting job:', error);
+    console.error('Error in start-job:', error);
     return NextResponse.json(
-      { error: 'Failed to start job' },
+      { error: 'Internal server error' },
       { status: 500 }
     );
   }
